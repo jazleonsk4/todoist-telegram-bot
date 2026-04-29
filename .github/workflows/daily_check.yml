@@ -1,0 +1,29 @@
+name: Daily Todoist Check
+
+on:
+  schedule:
+    # Runs at 08:00 UTC every day. Change the '8' to your preferred hour (UTC time).
+    - cron: '0 8 * * *'
+  workflow_dispatch: # Allows you to click a button to run it manually for testing
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install libraries
+        run: pip install -r requirements.txt
+
+      - name: Run Bot
+        env:
+          TODOIST_TOKEN: ${{ secrets.TODOIST_TOKEN }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python main.py
