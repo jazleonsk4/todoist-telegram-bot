@@ -1,0 +1,47 @@
+name: Telegram Check Poll
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: telegram-check-poll
+  cancel-in-progress: false
+
+jobs:
+  poll-telegram:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install libraries
+        run: pip install -r requirements.txt
+
+      - name: Poll Telegram for Check command
+        env:
+          RUN_MODE: poll_check
+          TODOIST_TOKEN: ${{ secrets.TODOIST_TOKEN }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python main.py
+
+      - name: Save Telegram update offset
+        run: |
+          if [ -f telegram_offset.txt ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add telegram_offset.txt
+            git diff --cached --quiet || git commit -m "Update Telegram offset"
+            git push
+          fi
