@@ -11,12 +11,14 @@ CHAT_ID = os.environ.get("CHAT_ID", "").strip()
 def get_tasks():
     api = TodoistAPI(TODOIST_TOKEN)
     try:
-        # The library handles all the complex connection logic for you
+        # The library returns a list of Task objects
         tasks = api.get_tasks()
+        # Get today's date in YYYY-MM-DD format
         today = datetime.now().strftime("%Y-%m-%d")
         
         due_today = []
         for task in tasks:
+            # Check if task has a due date and if that date is today
             if task.due and task.due.date == today:
                 due_today.append(task.content)
         return due_today
@@ -37,6 +39,6 @@ if __name__ == "__main__":
             send_telegram(message)
             print("✅ Success! Message sent to Telegram.")
         else:
-            print("✅ Connection successful, but no tasks are due today.")
+            print("✅ Connection successful! No tasks are due today.")
     else:
         print("⚠️ Failed to retrieve tasks.")
