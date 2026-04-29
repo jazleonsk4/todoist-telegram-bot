@@ -1,1 +1,1 @@
-requests
+todoist-api-python
