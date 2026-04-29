@@ -5,9 +5,6 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 concurrency:
   group: telegram-check-poll
   cancel-in-progress: false
@@ -35,13 +32,3 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python main.py
-
-      - name: Save Telegram update offset
-        run: |
-          if [ -f telegram_offset.txt ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add telegram_offset.txt
-            git diff --cached --quiet || git commit -m "Update Telegram offset"
-            git push
-          fi
