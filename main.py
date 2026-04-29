@@ -22,7 +22,7 @@ def get_tasks_due_today():
 
 def send_to_telegram(task_list):
     # This URL is fixed to prevent the 'Failed to parse' error
-    url = f"https://telegram.org{TELEGRAM_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/{TELEGRAM_TOKEN}/sendMessage"
     
     if task_list is None:
         text = "⚠️ Connection to Todoist failed."
