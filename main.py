@@ -1,7 +1,6 @@
 import os
 import html
 import json
-from pathlib import Path
 from datetime import datetime
 
 import pytz
@@ -9,14 +8,25 @@ import requests
 from todoist_api_python.api import TodoistAPI
 
 
+# =========================
+# Setup
+# =========================
+
 TODOIST_TOKEN = os.environ.get("TODOIST_TOKEN", "").strip()
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
 CHAT_ID = os.environ.get("CHAT_ID", "").strip()
+
+# RUN_MODE:
+# - send_report = send scheduled Todoist report
+# - poll_check  = check Telegram messages for "check"
 RUN_MODE = os.environ.get("RUN_MODE", "send_report").strip()
 
 MY_TZ = pytz.timezone("Asia/Kuala_Lumpur")
-STATE_FILE = Path("telegram_offset.txt")
 
+
+# =========================
+# Basic checks
+# =========================
 
 def validate_env():
     missing = []
@@ -32,13 +42,34 @@ def validate_env():
         raise RuntimeError(f"Missing GitHub secret(s): {', '.join(missing)}")
 
 
+# =========================
+# Todoist
+# =========================
+
 def get_task_due_date(task):
+    """
+    Returns Todoist task due date as YYYY-MM-DD, or None.
+    """
     if not task.due or not task.due.date:
         return None
 
-    # Todoist due.date is normally YYYY-MM-DD.
-    # This also works safely if it ever includes time info.
     return str(task.due.date)[:10]
+
+
+def get_all_tasks(api):
+    """
+    Supports both possible SDK return styles:
+    - list of tasks
+    - pages/lists of tasks
+    """
+    result = api.get_tasks()
+
+    for item in result:
+        if isinstance(item, list):
+            for task in item:
+                yield task
+        else:
+            yield item
 
 
 def get_overdue_and_today_tasks():
@@ -48,19 +79,18 @@ def get_overdue_and_today_tasks():
     today_tasks = []
 
     try:
-        with TodoistAPI(TODOIST_TOKEN) as api:
-            # get_tasks() returns pages/lists of tasks
-            for page in api.get_tasks(limit=200):
-                for task in page:
-                    due_date = get_task_due_date(task)
+        api = TodoistAPI(TODOIST_TOKEN)
 
-                    if not due_date:
-                        continue
+        for task in get_all_tasks(api):
+            due_date = get_task_due_date(task)
 
-                    if due_date < today_str:
-                        overdue_tasks.append(task.content)
-                    elif due_date == today_str:
-                        today_tasks.append(task.content)
+            if not due_date:
+                continue
+
+            if due_date < today_str:
+                overdue_tasks.append(task.content)
+            elif due_date == today_str:
+                today_tasks.append(task.content)
 
         return overdue_tasks, today_tasks, None
 
@@ -68,6 +98,10 @@ def get_overdue_and_today_tasks():
         print(f"❌ Todoist Error: {e}")
         return [], [], str(e)
 
+
+# =========================
+# Telegram report formatting
+# =========================
 
 def format_task_list(tasks, empty_text):
     if not tasks:
@@ -100,6 +134,10 @@ def build_report():
 
 
 def send_to_telegram(text):
+    """
+    Telegram message limit is around 4096 characters.
+    This splits long reports safely.
+    """
     max_length = 3900
     lines = text.splitlines()
 
@@ -136,21 +174,22 @@ def send_to_telegram(text):
     print("✅ Telegram message sent")
 
 
-def read_last_update_id():
-    if not STATE_FILE.exists():
-        return None
+# =========================
+# Telegram Check command
+# =========================
 
-    try:
-        return int(STATE_FILE.read_text().strip() or "0")
-    except ValueError:
-        return 0
+def is_check_command(text):
+    text = (text or "").strip().lower()
+
+    if text == "check":
+        return True
+
+    first_word = text.split()[0] if text else ""
+
+    return first_word == "/check" or first_word.startswith("/check@")
 
 
-def write_last_update_id(update_id):
-    STATE_FILE.write_text(str(update_id) + "\n")
-
-
-def get_telegram_updates(offset):
+def get_telegram_updates(offset=None):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates"
 
     params = {
@@ -172,57 +211,62 @@ def get_telegram_updates(offset):
     return data.get("result", [])
 
 
-def is_check_command(text):
-    text = (text or "").strip().lower()
-
-    if text == "check":
-        return True
-
-    first_word = text.split()[0] if text else ""
-
-    return first_word == "/check" or first_word.startswith("/check@")
+def confirm_telegram_updates(last_update_id):
+    """
+    Tells Telegram these updates are already processed.
+    This prevents the bot from replying again to the same 'check'.
+    """
+    if isinstance(last_update_id, int):
+        get_telegram_updates(offset=last_update_id + 1)
 
 
 def handle_check_commands():
-    last_update_id = read_last_update_id()
+    updates = get_telegram_updates()
 
-    # First run: initialize offset so old Telegram messages do not trigger replies.
-    if last_update_id is None:
-        updates = get_telegram_updates(offset=-1)
-        newest_id = max(
-            [update.get("update_id", 0) for update in updates],
-            default=0,
-        )
-        write_last_update_id(newest_id)
-        print("✅ Telegram offset initialized. Send 'Check' again after this run.")
+    if not updates:
+        print("No Telegram updates found.")
         return
 
-    updates = get_telegram_updates(offset=last_update_id + 1)
-    newest_id = last_update_id
+    newest_update_id = None
+    replied = False
 
-    for update in updates:
-        update_id = update.get("update_id")
+    try:
+        for update in updates:
+            update_id = update.get("update_id")
 
-        if isinstance(update_id, int):
-            newest_id = max(newest_id, update_id)
+            if isinstance(update_id, int):
+                if newest_update_id is None or update_id > newest_update_id:
+                    newest_update_id = update_id
 
-        message = update.get("message", {})
-        chat = message.get("chat", {})
-        incoming_chat_id = str(chat.get("id", ""))
+            message = update.get("message", {})
+            chat = message.get("chat", {})
+            incoming_chat_id = str(chat.get("id", ""))
+            text = message.get("text", "")
 
-        # Only respond to your configured chat/group
-        if incoming_chat_id != CHAT_ID:
-            continue
+            print(f"Received message from chat_id={incoming_chat_id}: {text}")
 
-        text = message.get("text", "")
+            # Only respond to your own configured Telegram chat
+            if incoming_chat_id != CHAT_ID:
+                print("Ignored message because CHAT_ID does not match.")
+                continue
 
-        if is_check_command(text):
-            print("✅ Received Check command")
-            send_to_telegram(build_report())
+            if is_check_command(text):
+                print("✅ Received Check command")
+                send_to_telegram(build_report())
+                replied = True
+            else:
+                print("Ignored message because it is not Check.")
 
-    if newest_id != last_update_id:
-        write_last_update_id(newest_id)
+    finally:
+        confirm_telegram_updates(newest_update_id)
 
+    if not replied:
+        print("No valid Check command found.")
+
+
+# =========================
+# Main
+# =========================
 
 if __name__ == "__main__":
     validate_env()
