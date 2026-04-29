@@ -2,58 +2,49 @@ import os
 import requests
 from datetime import datetime
 
-# Get keys from GitHub Secrets
-TODOIST_TOKEN = os.environ.get("TODOIST_TOKEN")
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-CHAT_ID = os.environ.get("CHAT_ID")
+# Get keys
+TODOIST_TOKEN = os.environ.get("TODOIST_TOKEN", "").strip()
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
+CHAT_ID = os.environ.get("CHAT_ID", "").strip()
 
-def get_due_tasks():
-    # HEADERS: This is how we prove to Todoist who we are
-    headers = {"Authorization": f"Bearer {TODOIST_TOKEN}"}
+def debug_check():
+    print("--- 🔍 DEEP DEBUG START ---")
+    if not TODOIST_TOKEN:
+        print("❌ ERROR: TODOIST_TOKEN is empty! Check your GitHub Secrets.")
+        return
     
-    # ENDPOINT: We are using the official REST V2 API
+    # This prints just the start and end of your token to check for extra spaces
+    print(f"Token Check: Starts with '{TODOIST_TOKEN[:3]}...' and ends with '...{TODOIST_TOKEN[-3:]}'")
+    print(f"Token Length: {len(TODOIST_TOKEN)} characters")
+
+    headers = {"Authorization": f"Bearer {TODOIST_TOKEN}"}
     url = "https://todoist.com"
     
     try:
-        # We request the tasks from Todoist
         response = requests.get(url, headers=headers)
+        print(f"Status Code: {response.status_code}")
+        print(f"Content Type: {response.headers.get('Content-Type')}")
         
-        # If Todoist says OK (200), we process the data
         if response.status_code == 200:
             tasks = response.json()
-            today = datetime.now().strftime("%Y-%m-%d")
-            
-            # Look for tasks due today
-            due_today = []
-            for t in tasks:
-                due_info = t.get("due")
-                if due_info and due_info.get("date") == today:
-                    due_today.append(t.get("content", "Untitled Task"))
-            return due_today
+            print(f"✅ SUCCESS: Received {len(tasks)} tasks from Todoist.")
+            return tasks
         else:
-            print(f"❌ Todoist error: {response.status_code}")
-            return None
-            
+            print(f"❌ TODOIST REJECTED TOKEN: {response.text}")
     except Exception as e:
-        print(f"❌ Connection error: {e}")
-        return None
-
-def send_to_telegram(msg):
-    # This sends the actual message to your bot
-    url = f"https://telegram.org{TELEGRAM_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
-    requests.post(url, data=data)
+        print(f"❌ CRASH: {e}")
+    return None
 
 if __name__ == "__main__":
-    tasks = get_due_tasks()
-    
+    tasks = debug_check()
     if tasks:
-        # If tasks were found, send them!
-        task_text = "\n".join([f"▫️ {t}" for t in tasks])
-        message = f"📅 *Tasks Due Today:*\n{task_text}"
-        send_to_telegram(message)
-        print("✅ Success! Check your Telegram.")
-    elif tasks == []:
-        print("✅ No tasks due today. Everything is clear!")
-    else:
-        print("⚠️ Script stopped because it couldn't connect to Todoist.")
+        today = datetime.now().strftime("%Y-%m-%d")
+        due_today = [t["content"] for t in tasks if t.get("due") and t["due"]["date"] == today]
+        
+        if due_today:
+            msg = "📅 *Tasks Due Today:*\n" + "\n".join([f"▫️ {t}" for t in due_today])
+            url = f"https://telegram.org{TELEGRAM_TOKEN}/sendMessage"
+            requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"})
+            print("🚀 Telegram message sent!")
+        else:
+            print("📅 No tasks due today, but the connection worked!")
