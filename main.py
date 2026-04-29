@@ -1,52 +1,42 @@
 import os
-import requests
+from todoist_api_python.api import TodoistAPI
 from datetime import datetime
+import requests
 
+# 1. Setup keys
 TODOIST_TOKEN = os.environ.get("TODOIST_TOKEN", "").strip()
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
 CHAT_ID = os.environ.get("CHAT_ID", "").strip()
 
-def get_due_tasks():
-    # Strict headers to ensure Todoist sends JSON, not a webpage
-    headers = {
-        "Authorization": f"Bearer {TODOIST_TOKEN}",
-        "Content-Type": "application/json",
-        "User-Agent": "TodoistBot/1.0"
-    }
-    url = "https://todoist.com"
-    
+def get_tasks():
+    api = TodoistAPI(TODOIST_TOKEN)
     try:
-        response = requests.get(url, headers=headers)
+        # The library handles all the complex connection logic for you
+        tasks = api.get_tasks()
+        today = datetime.now().strftime("%Y-%m-%d")
         
-        # If we still get HTML, try the 'Sync' endpoint as a backup
-        if "text/html" in response.headers.get("Content-Type", ""):
-            print("⚠️ REST API blocked. Trying Sync API fallback...")
-            sync_url = "https://todoist.com"
-            sync_data = {"sync_token": "*", "resource_types": '["items"]'}
-            response = requests.post(sync_url, headers=headers, data=sync_data)
+        due_today = []
+        for task in tasks:
+            if task.due and task.due.date == today:
+                due_today.append(task.content)
+        return due_today
+    except Exception as error:
+        print(f"❌ Todoist Library Error: {error}")
+        return None
 
-        if response.status_code == 200:
-            data = response.json()
-            # Handle both REST (list) and Sync (dict) formats
-            tasks = data.get("items", data) if isinstance(data, dict) else data
-            today = datetime.now().strftime("%Y-%m-%d")
-            
-            return [t["content"] for t in tasks if t.get("due") and t["due"]["date"].startswith(today)]
-        
-        print(f"❌ Error: {response.status_code}")
-        return None
-    except Exception as e:
-        print(f"❌ Connection Failed: {e}")
-        return None
+def send_telegram(msg):
+    url = f"https://telegram.org{TELEGRAM_TOKEN}/sendMessage"
+    requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"})
 
 if __name__ == "__main__":
-    tasks = get_due_tasks()
-    if tasks:
-        msg = f"📅 *Tasks Due Today:*\n" + "\n".join([f"▫️ {t}" for t in tasks])
-        requests.post(f"https://telegram.org{TELEGRAM_TOKEN}/sendMessage", 
-                      data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"})
-        print("🚀 Success! Message sent.")
-    elif tasks == []:
-        print("✅ Connection OK. No tasks due today.")
+    due_tasks = get_tasks()
+    
+    if due_tasks is not None:
+        if due_tasks:
+            message = "📅 *Tasks Due Today:*\n" + "\n".join([f"▫️ {t}" for t in due_tasks])
+            send_telegram(message)
+            print("✅ Success! Message sent to Telegram.")
+        else:
+            print("✅ Connection successful, but no tasks are due today.")
     else:
-        print("⚠️ Script could not retrieve tasks.")
+        print("⚠️ Failed to retrieve tasks.")
