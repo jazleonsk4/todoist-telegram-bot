@@ -4,6 +4,7 @@ on:
   schedule:
     # Runs at 08:00 UTC every day. Change the '8' to your preferred hour (UTC time).
     - cron: '0 8 * * *'
+      timezone: "Asia/Kuala_Lumpur"  # <--- Add your local timezone here
   workflow_dispatch: # Allows you to click a button to run it manually for testing
 
 jobs:
