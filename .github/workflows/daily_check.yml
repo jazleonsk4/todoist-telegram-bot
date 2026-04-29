@@ -2,7 +2,7 @@ name: Daily Todoist Check
 
 on:
   schedule:
-    - cron: '7 8 * * *'
+    - cron: '7 8,15,18 * * *'
       timezone: "Asia/Kuala_Lumpur"
   workflow_dispatch:
 
@@ -22,8 +22,9 @@ jobs:
       - name: Install libraries
         run: pip install -r requirements.txt
 
-      - name: Run Bot
+      - name: Send Todoist report
         env:
+          RUN_MODE: send_report
           TODOIST_TOKEN: ${{ secrets.TODOIST_TOKEN }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
