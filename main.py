@@ -1,33 +1,39 @@
 import os
+import pytz
 import requests
+from datetime import datetime
+from todoist_api_python.api import TodoistAPI
 
-# Get keys from Secrets
-TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
-USER_ID = os.environ.get("CHAT_ID", "").strip()
+# Setup
+TODOIST_TOKEN = os.environ.get("TODOIST_TOKEN", "").strip()
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
+CHAT_ID = os.environ.get("CHAT_ID", "").strip()
+MY_TZ = pytz.timezone('Asia/Kuala_Lumpur')
 
-def send_fake_message():
-    # The URL that we finally fixed!
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    
-    print(f"DEBUG: Sending to {url.replace(TOKEN, '***')}")
-    
-    # This is the "fake" message you requested
-    text = "✅ **Todoist Update:** No tasks due today! Have a great day."
-    
-    payload = {
-        "chat_id": USER_ID,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
-
+def get_tasks_due_today():
+    api = TodoistAPI(TODOIST_TOKEN)
     try:
-        response = requests.post(url, data=payload)
-        if response.status_code == 200:
-            print("🚀 SUCCESS! Check your Telegram phone app now.")
-        else:
-            print(f"❌ ERROR {response.status_code}: {response.text}")
+        today_str = datetime.now(MY_TZ).strftime("%Y-%m-%d")
+        all_tasks = api.get_tasks()
+        # Correct way to loop through the library's task objects
+        return [t.content for t in all_tasks if t.due and t.due.date == today_str]
     except Exception as e:
-        print(f"❌ CRITICAL ERROR: {e}")
+        print(f"❌ Todoist Error: {e}")
+        return None
+
+def send_to_telegram(task_list):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    
+    if task_list is None:
+        text = "⚠️ Failed to connect to Todoist."
+    elif not task_list:
+        text = "✅ **Good News!** No tasks due today in Todoist."
+    else:
+        tasks_text = "\n".join([f"▫️ {t}" for t in task_list])
+        text = f"📅 *Tasks Due Today:*\n{tasks_text}"
+    
+    requests.post(url, data={"chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown"})
 
 if __name__ == "__main__":
-    send_fake_message()
+    tasks = get_tasks_due_today()
+    send_to_telegram(tasks)
