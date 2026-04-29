@@ -2,22 +2,22 @@ name: Daily Todoist Check
 
 on:
   schedule:
-    # Runs at 08:00 UTC every day. Change the '8' to your preferred hour (UTC time).
-    - cron: '0 8 * * *'
-      timezone: "Asia/Kuala_Lumpur"  # <--- Add your local timezone here
-  workflow_dispatch: # Allows you to click a button to run it manually for testing
+    - cron: '7 8 * * *'
+      timezone: "Asia/Kuala_Lumpur"
+  workflow_dispatch:
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
 
       - name: Install libraries
         run: pip install -r requirements.txt
