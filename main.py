@@ -1,60 +1,58 @@
 import os
 import requests
-import json
+from datetime import datetime
 
+# Get keys from GitHub Secrets
 TODOIST_TOKEN = os.environ.get("TODOIST_TOKEN", "").strip()
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
 CHAT_ID = os.environ.get("CHAT_ID", "").strip()
 
 def get_due_tasks():
-    # We switch to the 'Sync' API which is more robust
-    url = "https://todoist.com"
-    headers = {"Authorization": f"Bearer {TODOIST_TOKEN}"}
-    
-    # We ask only for 'items' (tasks)
-    data = {
-        "sync_token": "*",
-        "resource_types": '["items"]'
+    # Adding a 'User-Agent' makes the script look like a real browser
+    headers = {
+        "Authorization": f"Bearer {TODOIST_TOKEN}",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
     }
+    url = "https://todoist.com"
     
     try:
-        response = requests.post(url, headers=headers, data=data)
+        # Using a standard GET request to avoid the 405 'Method Not Allowed' error
+        response = requests.get(url, headers=headers, timeout=10)
         print(f"Status Code: {response.status_code}")
         
-        if response.status_code != 200:
-            print(f"Error from Todoist: {response.text}")
-            return []
-
-        result = response.json()
-        tasks = result.get("items", [])
-        
-        # Get today's date in Todoist format
-        from datetime import datetime
-        today = datetime.now().strftime("%Y-%m-%d")
-        
-        due_today = []
-        for t in tasks:
-            due = t.get("due")
-            # Check if the task is due today and not completed
-            if due and due.get("date").startswith(today) and t.get("checked") == 0:
-                due_today.append(t.get("content"))
-        
-        return due_today
+        if response.status_code == 200:
+            tasks = response.json()
+            today = datetime.now().strftime("%Y-%m-%d")
+            
+            # Find tasks where the due date is today
+            due_today = []
+            for t in tasks:
+                due_info = t.get("due")
+                if due_info and due_info.get("date") == today:
+                    due_today.append(t.get("content", "Untitled Task"))
+            return due_today
+        else:
+            print(f"❌ Error from Todoist: {response.status_code} - {response.text}")
+            return None
+            
     except Exception as e:
-        print(f"An error occurred: {e}")
-        return []
+        print(f"❌ Connection error: {e}")
+        return None
 
-def send_to_telegram(tasks):
-    if not tasks:
-        print("✅ No tasks due today. No message sent.")
-        return
-        
-    msg = "📅 *Tasks Due Today:*\n" + "\n".join([f"▫️ {t}" for t in tasks])
+def send_to_telegram(msg):
     url = f"https://telegram.org{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
-    requests.post(url, data=payload)
-    print("🚀 Message sent to Telegram!")
+    requests.post(url, data=payload, timeout=10)
 
 if __name__ == "__main__":
     tasks = get_due_tasks()
-    send_to_telegram(tasks)
+    
+    if tasks:
+        task_text = "\n".join([f"▫️ {t}" for t in tasks])
+        message = f"📅 *Tasks Due Today:*\n{task_text}"
+        send_to_telegram(message)
+        print("✅ Success! Message sent to Telegram.")
+    elif tasks == []:
+        print("✅ Success! No tasks due today.")
+    else:
+        print("⚠️ Script stopped due to a connection error.")
