@@ -237,7 +237,13 @@ def confirm_telegram_updates(last_update_id):
     if isinstance(last_update_id, int):
         get_telegram_updates(offset=last_update_id + 1)
 
-
+def delete_telegram_webhook():
+    telegram_request(
+        "deleteWebhook",
+        data={"drop_pending_updates": "false"},
+    )
+    print("✅ Telegram webhook removed / polling mode enabled")
+    
 def handle_check_commands():
     updates = get_telegram_updates()
 
