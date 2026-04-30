@@ -110,7 +110,7 @@ def format_task_list(tasks, empty_text):
     return "\n".join(f"▫️ {html.escape(task)}" for task in tasks)
 
 
-def build_report():
+def build_report(source="scheduled report"):
     overdue_tasks, today_tasks, error = get_overdue_and_today_tasks()
     now_text = datetime.now(MY_TZ).strftime("%Y-%m-%d %I:%M %p")
 
@@ -125,7 +125,8 @@ def build_report():
 
     return (
         f"🕒 <b>Todoist Check</b>\n"
-        f"{html.escape(now_text)}\n\n"
+        f"{html.escape(now_text)}\n"
+        f"Source: {html.escape(source)}\n\n"
         f"⚠️ <b>Overdue</b> ({len(overdue_tasks)})\n"
         f"{overdue_text}\n\n"
         f"📅 <b>Due Today</b> ({len(today_tasks)})\n"
@@ -276,7 +277,7 @@ def handle_check_commands():
 
             if is_check_command(text):
                 print("✅ Received Check command")
-                send_to_telegram(build_report())
+                send_to_telegram(build_report("/check command"))
                 replied = True
             else:
                 print("Ignored message because it is not Check.")
@@ -298,4 +299,4 @@ if __name__ == "__main__":
     if RUN_MODE == "poll_check":
         handle_check_commands()
     else:
-        send_to_telegram(build_report())
+        send_to_telegram(build_report("scheduled report"))
