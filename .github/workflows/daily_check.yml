@@ -22,6 +22,14 @@ jobs:
       - name: Install libraries
         run: pip install -r requirements.txt
 
+      - name: Debug schedule time
+        run: |
+          echo "GitHub event name: $GITHUB_EVENT_NAME"
+          echo "UTC time:"
+          date -u
+          echo "Malaysia time:"
+          TZ=Asia/Kuala_Lumpur date
+
       - name: Send Todoist report
         env:
           RUN_MODE: send_report
