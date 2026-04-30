@@ -228,7 +228,6 @@ def get_telegram_updates(offset=None):
 
     return data.get("result", [])
 
-
 def confirm_telegram_updates(last_update_id):
     """
     Tells Telegram these updates are already processed.
@@ -245,6 +244,7 @@ def delete_telegram_webhook():
     print("✅ Telegram webhook removed / polling mode enabled")
     
 def handle_check_commands():
+    delete_telegram_webhook()
     updates = get_telegram_updates()
 
     if not updates:
