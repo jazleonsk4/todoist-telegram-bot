@@ -132,7 +132,29 @@ def build_report():
         f"{today_text}"
     )
 
+def telegram_request(method, data=None, params=None):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/{method}"
 
+    response = requests.post(
+        url,
+        data=data,
+        params=params,
+        timeout=20,
+    )
+
+    try:
+        payload = response.json()
+    except Exception:
+        payload = {}
+
+    if not response.ok or not payload.get("ok"):
+        raise RuntimeError(
+            f"Telegram {method} failed: "
+            f"HTTP {response.status_code} - {response.text[:1000]}"
+        )
+
+    return payload
+    
 def send_to_telegram(text):
     """
     Telegram message limit is around 4096 characters.
@@ -157,19 +179,15 @@ def send_to_telegram(text):
         chunks.append(current_chunk)
 
     for chunk in chunks:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
-        response = requests.post(
-            url,
+                telegram_request(
+            "sendMessage",
             data={
                 "chat_id": CHAT_ID,
                 "text": chunk,
                 "parse_mode": "HTML",
             },
-            timeout=20,
         )
-
-        response.raise_for_status()
 
     print("✅ Telegram message sent")
 
